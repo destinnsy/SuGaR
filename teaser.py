@@ -173,5 +173,8 @@ if __name__ == "__main__":
     safe_state(args.quiet)
 
     render_teaser(
-        model.extract(args), args.iteration, pipeline.extract(args), args.ply_path
+        model.extract(args),
+        args.iteration,
+        pipeline.extract(args),
+        getattr(args, "ply_path", None),
     )
