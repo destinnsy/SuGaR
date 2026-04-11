@@ -55,7 +55,7 @@ def draw_points_on_image(points, colors, image, size=1):
     return image
 
 
-def proj_points(view, gaussians, pipeline, background):
+def proj_points(view, gaussians, pipeline, background, output_path="./output.jpg"):
 
     # tune cam_center and cam_rot to find a suitable camera pose
     cam_center = np.array([0.1, -0.5, 0.7])
@@ -125,13 +125,14 @@ def proj_points(view, gaussians, pipeline, background):
         rendering.permute(1, 2, 0).detach().cpu().numpy(),
         size=0.3,
     )
-    image_proj.save(r"./output.jpg")
+    image_proj.save(output_path)
 
     return
 
 
 def render_teaser(
-    dataset: ModelParams, iteration: int, pipeline: PipelineParams, ply_path: str = None
+    dataset: ModelParams, iteration: int, pipeline: PipelineParams, ply_path: str = None,
+    output_path: str = "./output.jpg",
 ):
     with torch.no_grad():
         gaussians = GaussianModel(dataset.sh_degree)
@@ -146,7 +147,7 @@ def render_teaser(
         bg_color = [1, 1, 1]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
-        proj_points(view, gaussians, pipeline, background)
+        proj_points(view, gaussians, pipeline, background, output_path=output_path)
 
 
 if __name__ == "__main__":
@@ -161,6 +162,12 @@ if __name__ == "__main__":
         type=str,
         help="Optional: path to a .ply file to load gaussians from directly "
         "(e.g. SuGaR refined output). Overrides the checkpoint gaussians.",
+    )
+    parser.add_argument(
+        "--output_path",
+        default="./output.jpg",
+        type=str,
+        help="Path to save the output visualization image (default: ./output.jpg).",
     )
     parser.add_argument("--skip_train", action="store_true")
     parser.add_argument("--skip_test", action="store_true")
@@ -177,4 +184,5 @@ if __name__ == "__main__":
         args.iteration,
         pipeline.extract(args),
         getattr(args, "ply_path", None),
+        output_path=getattr(args, "output_path", "./output.jpg"),
     )
