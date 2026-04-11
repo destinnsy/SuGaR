@@ -70,7 +70,7 @@ The notebook `SuGaR_colab.ipynb` is the primary entry point. It is **not run loc
 
 ---
 
-## DTU Pipeline — NOT YET TESTED (debugging may be needed)
+## DTU Pipeline
 
 This section documents changes made to `SuGaR_colab.ipynb` to train and evaluate against the DTU dataset (scan24) instead of the bicycle scene. These changes are part of a school project comparing SuGaR and mini-splatting on the same dataset.
 
