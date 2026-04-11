@@ -9,7 +9,6 @@ sys.path.insert(
 
 import torch
 from scene import Scene
-from gaussian_renderer import render
 from utils.general_utils import safe_state
 from argparse import ArgumentParser
 from arguments import ModelParams, PipelineParams, get_combined_args
@@ -17,7 +16,6 @@ from gaussian_renderer import GaussianModel
 
 import numpy as np
 from utils.sh_utils import SH2RGB
-from scene.cameras import Camera
 from PIL import Image, ImageDraw
 
 
@@ -55,32 +53,14 @@ def draw_points_on_image(points, colors, image, size=1):
     return image
 
 
-def proj_points(view, gaussians, pipeline, background, output_path="./output.jpg"):
+def proj_points(view, gaussians, output_path="./output.jpg"):
 
-    # tune cam_center and cam_rot to find a suitable camera pose
-    cam_center = np.array([0.1, -0.5, 0.7])
-    cam_rot = view.R
+    # Use the actual training image as the background
+    bg_image = view.original_image.permute(1, 2, 0).detach().cpu().numpy()  # H×W×C
+    H, W = bg_image.shape[:2]
 
-    # tune aabb box mask to extract foreground points
+    # aabb box mask to extract foreground points
     aabb = np.array([[-1.6, -1.6, -1.6], [1.6, 1.6, 1.6]])
-
-    # render image
-    view_reset = Camera(
-        colmap_id=view.colmap_id,
-        R=cam_rot,
-        T=cam_center,
-        FoVx=view.FoVx,
-        FoVy=view.FoVy,
-        image=view.original_image,
-        gt_alpha_mask=None,
-        image_name=view.image_name,
-        uid=view.uid,
-    )
-
-    render_pkg = render(view_reset, gaussians, pipeline, background)
-    rendering = render_pkg["render"]
-
-    # extract foreground
     aabb_min = aabb[0]
     aabb_max = aabb[1]
 
@@ -99,31 +79,28 @@ def proj_points(view, gaussians, pipeline, background, output_path="./output.jpg
     xyz = xyz[aabb_mask]
     rgb = rgb[aabb_mask]
 
-    # perspective projection (modified from cuda code)
-    full_proj_transform = view_reset.full_proj_transform
+    # perspective projection using the real training camera
+    full_proj_transform = view.full_proj_transform
     p_hom = transformPoint4x4(xyz, full_proj_transform)
     p_w = 1.0 / (p_hom[:, 3] + 0.0000001)
     p_proj = p_hom[:, :3] * p_w[:, None]
 
-    world_view_transform = view_reset.world_view_transform
+    world_view_transform = view.world_view_transform
     p_view = transformPoint4x3(xyz, world_view_transform)
     mask = p_view[:, 2].cpu().numpy() > 0.2
 
-    point_image = ndc2Pix(p_proj[:, 0], rendering.shape[2]), ndc2Pix(
-        p_proj[:, 1], rendering.shape[1]
-    )
+    point_image = ndc2Pix(p_proj[:, 0], W), ndc2Pix(p_proj[:, 1], H)
 
     point_image = torch.cat((point_image[0][:, None], point_image[1][:, None]), -1)
 
     points = point_image.detach().cpu().numpy()[mask]
     colors = rgb.detach().cpu().numpy()[mask]
 
-    # tune point size for better visualization 0.3, 0.3, 1.2
     image_proj = draw_points_on_image(
         points,
         np.zeros(colors.shape) + [0, 0, 255],
-        rendering.permute(1, 2, 0).detach().cpu().numpy(),
-        size=0.3,
+        bg_image,
+        size=3,
     )
     image_proj.save(output_path)
 
@@ -144,10 +121,7 @@ def render_teaser(
             gaussians.load_ply(ply_path)
 
         view = scene.getTrainCameras()[0]
-        bg_color = [1, 1, 1]
-        background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
-
-        proj_points(view, gaussians, pipeline, background, output_path=output_path)
+        proj_points(view, gaussians, output_path=output_path)
 
 
 if __name__ == "__main__":
